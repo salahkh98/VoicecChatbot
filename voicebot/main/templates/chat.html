@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Chatbot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 50px;
+            margin-bottom: 20px;
+        }
+
+        #chat-container {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
+            margin: 0 auto;
+            max-width: 600px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background-color: #e8e3e3;
+            color: rgb(0, 0, 0);
+            float: right;
+        }
+
+
+
+        #message-input-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        #message-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
+            box-sizing: border-box;
+        }
+
+        #voice-input-button {
+            background-color: #0084ff;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .1);
+        }
+
+        #voice-input-button:focus {
+            outline: none;
+        }
+
+        #voice-input-button:active {
+            background-color: #0073e6;
+            box-shadow: none;
+        }
+
+        @media (max-width: 600px) {
+            #chat-container {
+                max-width: 100%;
+            }
+        }
+
+        .recording {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .bot-message {
+            background-color: #f4dde7;
+            color: rgb(0, 0, 0);
+            float: left;
+            position: relative;
+            border-radius: 10px;
+        }
+
+
+
+        .bot-message {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            background-image: url(https://mada.ps/site_assets/images/logo-v.png);
+            background-repeat: no-repeat;
+            background-position: left center;
+            background-size: 50px 35px;
+            /* adjust the size according to your image */
+            padding-left: 60px;
+            /* adjust the padding-left value to make space for the image */
+        }
+
+        #voice-input-button{
+            background-color: #cd0261;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Mada - مدى</h1>
+    <div id="chat-container">
+        {% for conversation in conversations %}
+        <div class="message user-message">
+            {{ conversation.customer_question }}
+        </div>
+        <div class="message bot-message">
+            {{ conversation.bot_response }}
+        </div>
+        {% endfor %}
+    </div>
+    <form id="message-form">
+        {% csrf_token %}
+        <div id="message-input-container">
+            <input type="text" id="message-input" placeholder="Enter your message...">
+            <button type="button" id="voice-input-button">Speak</button>
+        </div>
+        <input type="submit" style="display: none;">
+    </form>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(function () {
+            if ('webkitSpeechRecognition' in window) {
+                var recognition = new webkitSpeechRecognition();
+                recognition.lang = 'ar-SA';
+                recognition.onstart = function (event) {
+                    $('#voice-input-button').addClass('recording');
+                };
+                recognition.onend = function (event) {
+                    $('#voice-input-button').removeClass('recording');
+                };
+                recognition.onresult = function (event) {
+                    var text = event.results[0][0].transcript;
+                    $('#message-input').val(text);
+                    $('#message-form').submit();
+                };
+    
+                // Add event listener for voice input button
+                var isTouchDevice = 'ontouchstart' in document.documentElement;
+                var eventName = isTouchDevice ? 'touchstart' : 'click';
+                $('#voice-input-button').on(eventName, function () {
+                    recognition.start();
+                });
+    
+                // Add event listener for message form
+                $('#message-form').submit(function (event) {
+                    event.preventDefault();
+                    var message = $('#message-input').val();
+                    if (message) {
+                        $('#chat-container').append(
+                            '<div class="message user-message">' + message + '</div>'
+                        );
+                        $('#message-input').val('');
+                        $.ajax({
+                            url: '/api/chatbot/',
+                            method: 'POST',
+                            data: {
+                                'message': message,
+                                'csrfmiddlewaretoken': '{{ csrf_token }}'
+                            },
+                            success: function (response) {
+                                $('#chat-container').append(
+                                    '<div class="message bot-message">' + response.response + '</div>'
+                                );
+                                $('#chat-container').scrollTop($('#chat-container')[0].scrollHeight);
+                            }
+                        });
+                    }
+                });
+    
+                // Prompt the user for microphone permission on load
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(function (stream) {
+                            $('#voice-input-button').show();
+                        })
+                        .catch(function (error) {
+                            console.log('Error getting user media:', error);
+                        });
+                }
+            } else {
+                console.log('Web Speech API not supported');
+            }
+        });
+    </script>
+</body>
+
+</html>
